@@ -146,7 +146,8 @@ func (s *pickerSession) wait() pickerResult {
 	return result
 }
 
-func runPicker(t *testing.T, scenario string) *pickerSession {
+// runPicker starts a scenario in tmux; env holds extra NAME=value variables
+func runPicker(t *testing.T, scenario string, env ...string) *pickerSession {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("runs fzf in tmux")
@@ -159,8 +160,8 @@ func runPicker(t *testing.T, scenario string) *pickerSession {
 		socket: fmt.Sprintf("toru-test-%d-%s", os.Getpid(), scenario),
 		result: filepath.Join(t.TempDir(), "result.json"),
 	}
-	command := fmt.Sprintf("env -u TMUX %s=%s %s=%s %s -test.run='^TestPickerHelper$'; sleep 60",
-		pickerHelperEnv, scenario, pickerResultEnv, s.result, os.Args[0])
+	command := fmt.Sprintf("env -u TMUX -u OS %s %s=%s %s=%s %s -test.run='^TestPickerHelper$'; sleep 60",
+		strings.Join(env, " "), pickerHelperEnv, scenario, pickerResultEnv, s.result, os.Args[0])
 	s.tmux("new-session", "-d", "-x", "120", "-y", "24", command)
 	t.Cleanup(func() {
 		exec.Command("tmux", "-L", s.socket, "kill-server").Run()
@@ -207,6 +208,23 @@ func TestPickMainMenu(t *testing.T) {
 	s.keys("Enter")
 
 	if result := s.wait(); result.Err != "" || !reflect.DeepEqual(result.Value, []string{"select"}) {
+		t.Errorf("result: %+v", result)
+	}
+}
+
+func TestPickWindowsHeight(t *testing.T) {
+	// On Windows the picker sets a height, so that fzf does not use tcell
+	s := runPicker(t, "main", "OS=Windows_NT")
+	s.waitForScreen("replay")
+
+	// 99% of the 24 lines: the last line stays empty, the prompt is above it
+	lines := strings.Split(s.screen(), "\n")
+	if len(lines) < 24 || strings.TrimSpace(lines[23]) != "" || !strings.HasPrefix(lines[22], ">") {
+		t.Errorf("fzf should use 23 lines:\n%s", s.screen())
+	}
+
+	s.keys("Enter")
+	if result := s.wait(); result.Err != "" || !reflect.DeepEqual(result.Value, []string{"replay"}) {
 		t.Errorf("result: %+v", result)
 	}
 }

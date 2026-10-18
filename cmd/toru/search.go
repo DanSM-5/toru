@@ -175,6 +175,13 @@ var errAbort = errors.New("abort")
 // preview renders the preview window for an item, nil disables it
 func pick(items []string, preview func(i int) string, args ...string) ([]int, error) {
 	args = append([]string{"--cycle"}, args...)
+
+	// full screen fzf uses tcell on Windows, where keys like ctrl-/ and ctrl-^ do not work.
+	// with a height it uses its own renderer instead
+	if os.Getenv("OS") == "Windows_NT" {
+		args = append(args, "--height=99%")
+	}
+
 	if preview != nil {
 		args = append(args, "--preview-window=right:50%:wrap-word:border-rounded",
 			// ctrl-/ moves the preview below the list, hides it, then restores it
