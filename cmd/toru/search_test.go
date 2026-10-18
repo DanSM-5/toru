@@ -64,7 +64,7 @@ func TestPickerHelper(t *testing.T) {
 	switch scenario {
 	case "episodes":
 		result.Value, err = pickEpisodes(mockEpisodes)
-	case "main":
+	case "main", "cycle":
 		var action string
 		action, err = fzfMain()
 		result.Value = []string{action}
@@ -172,13 +172,22 @@ func TestPickEpisodesMulti(t *testing.T) {
 	s := runPicker(t, "episodes")
 	s.waitForScreen("4/4")
 	s.waitForScreen("Tab to select multiple episodes")
+
+	// The last episode is at the bottom, next to the prompt, as with --tac
+	lines := screenLines(s.screen())
+	if last := lines[len(lines)-4]; !strings.Contains(last, "Extras/Example Show - NCOP.mkv") {
+		t.Errorf("the last episode should be above the header and the prompt:\n%s", s.screen())
+	}
+
+	// Tab marks and moves down, towards the prompt
+	s.keys("Up")
 	s.keys("Tab")
 	s.keys("Tab")
 	s.waitForScreen("(2)")
 	s.keys("Enter")
 
 	// The marked episodes, sorted to play in order
-	want := []string{"Example Show - 01.mkv", "Example Show - 03.mkv"}
+	want := []string{"Example Show - 02.mkv", "Extras/Example Show - NCOP.mkv"}
 	if result := s.wait(); result.Err != "" || !reflect.DeepEqual(result.Value, want) {
 		t.Errorf("result: %+v, want %v", result, want)
 	}
@@ -187,10 +196,30 @@ func TestPickEpisodesMulti(t *testing.T) {
 func TestPickMainMenu(t *testing.T) {
 	s := runPicker(t, "main")
 	s.waitForScreen("replay")
-	s.keys("Down")
+
+	// The prompt is at the bottom, below the first item
+	lines := screenLines(s.screen())
+	if !strings.HasPrefix(lines[len(lines)-1], ">") || !strings.Contains(lines[len(lines)-3], "replay") {
+		t.Errorf("the prompt should be at the bottom:\n%s", s.screen())
+	}
+
+	s.keys("Up")
 	s.keys("Enter")
 
 	if result := s.wait(); result.Err != "" || !reflect.DeepEqual(result.Value, []string{"select"}) {
+		t.Errorf("result: %+v", result)
+	}
+}
+
+func TestPickCycle(t *testing.T) {
+	s := runPicker(t, "cycle")
+	s.waitForScreen("replay")
+
+	// Moving down from the first item wraps around to the last one
+	s.keys("Down")
+	s.keys("Enter")
+
+	if result := s.wait(); result.Err != "" || !reflect.DeepEqual(result.Value, []string{"exit"}) {
 		t.Errorf("result: %+v", result)
 	}
 }
@@ -201,6 +230,9 @@ func TestPickMenuPreview(t *testing.T) {
 
 	// The title is wrapped by words in the preview, so every word is intact
 	screen := s.screen()
+	if !strings.Contains(screen, "╭") || !strings.Contains(screen, "╯") {
+		t.Errorf("the preview window should have a rounded border; screen:\n%s", screen)
+	}
 	if !strings.Contains(screen, "↳") {
 		t.Errorf("the title should be wrapped; screen:\n%s", screen)
 	}
@@ -210,6 +242,20 @@ func TestPickMenuPreview(t *testing.T) {
 			t.Errorf("word %q is not intact in the preview:\n%s", word, preview)
 		}
 	}
+
+	// ctrl-/ rotates the preview window: below the list, hidden, then on the right again
+	s.keys("C-/")
+	s.waitFor("the preview below the list", func() bool { return previewPosition(s.screen()) == "down" })
+	s.keys("C-/")
+	s.waitFor("the preview to be hidden", func() bool { return previewPosition(s.screen()) == "hidden" })
+	s.keys("C-/")
+	s.waitFor("the preview on the right", func() bool { return previewPosition(s.screen()) == "right" })
+
+	// ctrl-^ toggles it; tmux has no name for the key, so send what terminals send (0x1e)
+	s.tmux("send-keys", "-H", "1e")
+	s.waitFor("the preview to be hidden", func() bool { return previewPosition(s.screen()) == "hidden" })
+	s.tmux("send-keys", "-H", "1e")
+	s.waitFor("the preview on the right", func() bool { return previewPosition(s.screen()) == "right" })
 
 	s.keys("Enter")
 	if result := s.wait(); result.Err != "" || !reflect.DeepEqual(result.Value, []string{mockTitle}) {
@@ -227,6 +273,28 @@ func TestPickNoMatches(t *testing.T) {
 	if result := s.wait(); result.Err != errAbort.Error() {
 		t.Errorf("result: %+v", result)
 	}
+}
+
+// previewPosition tells where the preview window is drawn: "right", "down" or "hidden"
+func previewPosition(screen string) string {
+	if !strings.Contains(screen, "Downloads: 42") {
+		return "hidden"
+	}
+	for _, line := range strings.Split(screen, "\n") {
+		if i := strings.Index(line, "╭"); i >= 0 {
+			// a window below the list spans the whole width
+			if i == 0 {
+				return "down"
+			}
+			return "right"
+		}
+	}
+	return "hidden"
+}
+
+// screenLines returns the lines of the screen without the trailing empty ones
+func screenLines(screen string) []string {
+	return strings.Split(strings.TrimRight(screen, "\n "), "\n")
 }
 
 // previewText returns the text inside the preview window borders

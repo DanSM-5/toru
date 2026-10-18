@@ -132,8 +132,11 @@ LOOP:
 		return err
 	}
 
-	// play that result
+	// play that result, going back to the results when no episode is selected
 	media, t, err := PlayTorrent(cl, choice.Magnet)
+	if errors.Is(err, errAbort) {
+		goto LOOP
+	}
 	if err != nil {
 		return err
 	}
@@ -171,9 +174,12 @@ var errAbort = errors.New("abort")
 // pick runs fzf over items and returns the indexes of the accepted items.
 // preview renders the preview window for an item, nil disables it
 func pick(items []string, preview func(i int) string, args ...string) ([]int, error) {
-	args = append([]string{"--layout=reverse"}, args...)
+	args = append([]string{"--cycle"}, args...)
 	if preview != nil {
-		args = append(args, "--preview-window=right:50%:wrap-word")
+		args = append(args, "--preview-window=right:50%:wrap-word:border-rounded",
+			// ctrl-/ moves the preview below the list, hides it, then restores it
+			"--bind=ctrl-/:change-preview-window(down|hidden|)",
+			"--bind=ctrl-^:toggle-preview")
 	}
 
 	opts, err := fzf.Parse(fzf.LibOptions{Args: args})
@@ -242,23 +248,14 @@ func fzfEpisodes(m []*torrent.File) ([]string, error) {
 		names = append(names, f.DisplayPath())
 	}
 
-	fpaths, err := pickEpisodes(names)
-
-	// User has selected nothing
-	if err != nil {
-		if errors.Is(err, errAbort) {
-			os.Exit(0)
-		} else {
-			return nil, err
-		}
-	}
-
-	return fpaths, nil
+	// errAbort when the user has selected nothing, so the caller can go back
+	return pickEpisodes(names)
 }
 
 // select one or more of the given episode paths, returned sorted
 func pickEpisodes(names []string) ([]string, error) {
-	idxs, err := pick(names, nil, "--multi", "--header=Tab to select multiple episodes")
+	// --tac lists the last episode at the bottom, next to the prompt
+	idxs, err := pick(names, nil, "--multi", "--tac", "--header=Tab to select multiple episodes")
 	if err != nil {
 		return nil, err
 	}

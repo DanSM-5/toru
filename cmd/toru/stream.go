@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -82,6 +83,8 @@ func StreamTorrent(torfile string, cl *libtorrent.Client) (player.MediaEntry, *t
 	if filesCount != 1 {
 		fpaths, err := fzfEpisodes(files)
 		if err != nil {
+			// nothing will be streamed from it
+			t.Drop()
 			return player.MediaEntry{}, nil, err
 		}
 
@@ -141,25 +144,32 @@ func PlayMedia(link player.MediaEntry, t *torrent.Torrent) error {
 	return nil
 }
 
+// play a torrent given on the command line, quitting when no episode is selected
+func playArg(cl *libtorrent.Client, torfile string) error {
+	_, _, err := PlayTorrent(cl, torfile)
+	if errors.Is(err, errAbort) {
+		os.Exit(0)
+	}
+
+	return err
+}
+
 // stream subcommand entry point
 func runStream(cl *libtorrent.Client) error {
 	if streaming.Magnet != "" {
-		_, _, err := PlayTorrent(cl, streaming.Magnet)
-		if err != nil {
+		if err := playArg(cl, streaming.Magnet); err != nil {
 			return err
 		}
 	}
 
 	if streaming.TorrentFile != "" {
-		_, _, err := PlayTorrent(cl, streaming.TorrentFile)
-		if err != nil {
+		if err := playArg(cl, streaming.TorrentFile); err != nil {
 			return err
 		}
 	}
 
 	if streaming.Args.Query != "" {
-		_, _, err := PlayTorrent(cl, streaming.Args.Query)
-		if err != nil {
+		if err := playArg(cl, streaming.Args.Query); err != nil {
 			return err
 		}
 	}
