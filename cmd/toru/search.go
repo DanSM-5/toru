@@ -1,18 +1,18 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path"
 	"sort"
 
+	fzf "github.com/DanSM-5/fzf.lib/src"
 	"github.com/anacrolix/torrent"
 	"github.com/charmbracelet/lipgloss"
-	fzf "github.com/ktr0731/go-fuzzyfinder"
-	"github.com/muesli/reflow/wordwrap"
-	"github.com/muesli/reflow/wrap"
 	"github.com/sweetbbak/toru/pkg/libtorrent"
 	"github.com/sweetbbak/toru/pkg/nyaa"
 	"github.com/sweetbbak/toru/pkg/search"
@@ -165,52 +165,107 @@ LOOP:
 	}
 }
 
+// errAbort is returned by the pickers when the user quits without selecting anything
+var errAbort = errors.New("abort")
+
+// pick runs fzf over items and returns the indexes of the accepted items.
+// preview renders the preview window for an item, nil disables it
+func pick(items []string, preview func(i int) string, args ...string) ([]int, error) {
+	args = append([]string{"--layout=reverse"}, args...)
+	if preview != nil {
+		args = append(args, "--preview-window=right:50%:wrap-word")
+	}
+
+	opts, err := fzf.Parse(fzf.LibOptions{Args: args})
+	if err != nil {
+		return nil, err
+	}
+
+	input := make(chan string, len(items))
+	for _, item := range items {
+		input <- item
+	}
+	close(input)
+	opts.Input = input
+
+	// the selection is read from opts.Accepted instead of the printed lines
+	opts.Printer = func(string) {}
+
+	if preview != nil {
+		opts.SetPreviewFunc(func(ctx context.Context, s *fzf.State, w io.Writer) error {
+			if s.Current == nil {
+				_, err := fmt.Fprintln(w, "No matches")
+				return err
+			}
+
+			_, err := io.WriteString(w, preview(s.Current.Index))
+			return err
+		}, fzf.PreviewOnQuery)
+	}
+
+	code, err := fzf.Run(opts)
+	switch code {
+	case fzf.ExitOk:
+	case fzf.ExitNoMatch, fzf.ExitInterrupt:
+		return nil, errAbort
+	default:
+		if err == nil {
+			err = fmt.Errorf("fzf exited with code %d", code)
+		}
+		return nil, err
+	}
+
+	var idxs []int
+	for _, e := range opts.Accepted() {
+		idxs = append(idxs, e.Index)
+	}
+
+	return idxs, nil
+}
+
 func fzfMain() (string, error) {
 	m := []string{"replay", "select", "search", "exit"}
-	idx, err := fzf.Find(
-		m,
-		func(i int) string {
-			return m[i]
-		},
-	)
+	idxs, err := pick(m, nil)
 
 	// User has selected nothing
 	if err != nil {
-		if errors.Is(err, fzf.ErrAbort) {
-			return "exit", err
-		} else {
-			return "exit", err
-		}
+		return "exit", err
 	}
 
-	return m[idx], nil
+	return m[idxs[0]], nil
 }
 
 // select one or more episodes (Tab to mark multiple), returned in playlist order
 func fzfEpisodes(m []*torrent.File) ([]string, error) {
-	l := len(m) - 1
-	idxs, err := fzf.FindMulti(
-		m,
-		func(i int) string {
-			// fpath := m[i].DisplayPath()
-			fpath := m[l-i].DisplayPath()
-			return fpath
-		},
-		fzf.WithHeader("Tab to select multiple episodes"),
-	)
+	var names []string
+	for _, f := range m {
+		names = append(names, f.DisplayPath())
+	}
+
+	fpaths, err := pickEpisodes(names)
 
 	// User has selected nothing
 	if err != nil {
-		if errors.Is(err, fzf.ErrAbort) {
+		if errors.Is(err, errAbort) {
 			os.Exit(0)
 		} else {
 			return nil, err
 		}
 	}
 
+	return fpaths, nil
+}
+
+// select one or more of the given episode paths, returned sorted
+func pickEpisodes(names []string) ([]string, error) {
+	idxs, err := pick(names, nil, "--multi", "--header=Tab to select multiple episodes")
+	if err != nil {
+		return nil, err
+	}
+
 	var fpaths []string
 	for _, idx := range idxs {
-		fpaths = append(fpaths, m[l-idx].DisplayPath())
+		fpaths = append(fpaths, names[idx])
 	}
 	sort.Strings(fpaths)
 
@@ -218,73 +273,49 @@ func fzfEpisodes(m []*torrent.File) ([]string, error) {
 }
 
 func fzfMenu(m []nyaa.Media) (nyaa.Media, error) {
-	idx, err := fzf.Find(
-		m,
-		func(i int) string {
-			return m[i].Name
-		},
-		fzf.WithPreviewWindow(func(i, width, height int) string {
-			if i == -1 {
-				return "No matches"
-			}
-
-			return wrapPreview(FormatMedia(m[i]), width)
-
-		}),
-	)
+	idxs, err := pick(mediaNames(m), func(i int) string {
+		return FormatMedia(m[i])
+	})
 
 	// User has selected nothing
 	if err != nil {
-		if errors.Is(err, fzf.ErrAbort) {
+		if errors.Is(err, errAbort) {
 			os.Exit(0)
 		} else {
 			return nyaa.Media{}, err
 		}
 	}
 
-	return m[idx], nil
+	return m[idxs[0]], nil
 }
 
 func fzfMenuMulti(m []nyaa.Media) ([]nyaa.Media, error) {
-	idxs, err := fzf.FindMulti(
-		m,
-		func(i int) string {
-			return m[i].Name
-		},
-		fzf.WithPreviewWindow(func(i, width, height int) string {
-			if i == -1 {
-				return "No matches"
-			}
-
-			return wrapPreview(FormatMedia(m[i]), width)
-
-		}),
-	)
-
-	var matches []nyaa.Media
-	for _, item := range idxs {
-		matches = append(matches, m[item])
-	}
+	idxs, err := pick(mediaNames(m), func(i int) string {
+		return FormatMedia(m[i])
+	}, "--multi")
 
 	// User has selected nothing
 	if err != nil {
-		if errors.Is(err, fzf.ErrAbort) {
+		if errors.Is(err, errAbort) {
 			os.Exit(0)
 		} else {
 			return nil, err
 		}
 	}
 
+	var matches []nyaa.Media
+	for _, idx := range idxs {
+		matches = append(matches, m[idx])
+	}
+
 	return matches, nil
 }
 
-// word wrap text to fit inside the preview window, which takes the right half of
-// the terminal minus its borders and padding. long words without spaces are hard wrapped
-func wrapPreview(s string, width int) string {
-	w := width - width/2 - 4
-	if w < 1 {
-		return s
+func mediaNames(m []nyaa.Media) []string {
+	var names []string
+	for _, media := range m {
+		names = append(names, media.Name)
 	}
 
-	return wrap.String(wordwrap.String(s, w), w)
+	return names
 }
