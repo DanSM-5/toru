@@ -324,6 +324,7 @@ func (c *Client) AddMagnet(magnet string) (*torrent.Torrent, error) {
 	if err != nil {
 		return nil, err
 	}
+	retryWriteErrors(t)
 	<-t.GotInfo()
 	return t, nil
 }
@@ -333,6 +334,7 @@ func (c *Client) AddTorrentFile(file string) (*torrent.Torrent, error) {
 	if err != nil {
 		return nil, err
 	}
+	retryWriteErrors(t)
 	<-t.GotInfo()
 	return t, nil
 }
@@ -363,6 +365,7 @@ func (c *Client) AddTorrentURL(url string) (*torrent.Torrent, error) {
 	if err != nil {
 		return nil, err
 	}
+	retryWriteErrors(t)
 	<-t.GotInfo()
 	return t, nil
 }
