@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/sweetbbak/toru/pkg/player/mpv"
+	"github.com/DanSM-5/toru/pkg/player/mpv"
 )
 
 var desktopPlayers = []GenericPlayer{

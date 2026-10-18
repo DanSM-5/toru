@@ -7,10 +7,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/DanSM-5/toru/pkg/libtorrent"
+	"github.com/DanSM-5/toru/pkg/search"
 	"github.com/anacrolix/torrent"
 	"github.com/pterm/pterm"
-	"github.com/sweetbbak/toru/pkg/libtorrent"
-	"github.com/sweetbbak/toru/pkg/search"
 )
 
 //

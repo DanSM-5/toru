@@ -11,11 +11,11 @@ import (
 	"sort"
 
 	fzf "github.com/DanSM-5/fzf.lib/src"
+	"github.com/DanSM-5/toru/pkg/libtorrent"
+	"github.com/DanSM-5/toru/pkg/nyaa"
+	"github.com/DanSM-5/toru/pkg/search"
 	"github.com/anacrolix/torrent"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/sweetbbak/toru/pkg/libtorrent"
-	"github.com/sweetbbak/toru/pkg/nyaa"
-	"github.com/sweetbbak/toru/pkg/search"
 )
 
 func runSearch(cl *libtorrent.Client) error {

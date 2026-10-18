@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/DanSM-5/toru/pkg/nyaa"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/dustin/go-humanize"
-	"github.com/sweetbbak/toru/pkg/nyaa"
 )
 
 var LeechColor = lipgloss.NewStyle().Foreground(lipgloss.Color("#E75B6B"))

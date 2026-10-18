@@ -6,8 +6,8 @@ import (
 	"os"
 	"runtime"
 
+	"github.com/DanSM-5/toru/pkg/libtorrent"
 	"github.com/jessevdk/go-flags"
-	"github.com/sweetbbak/toru/pkg/libtorrent"
 )
 
 const (

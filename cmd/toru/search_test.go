@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sweetbbak/toru/pkg/nyaa"
+	"github.com/DanSM-5/toru/pkg/nyaa"
 )
 
 const (

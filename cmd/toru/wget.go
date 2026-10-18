@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/DanSM-5/toru/pkg/libtorrent"
 	"github.com/pterm/pterm"
-	"github.com/sweetbbak/toru/pkg/libtorrent"
 )
 
 func DownloadTorrent(cl *libtorrent.Client) error {

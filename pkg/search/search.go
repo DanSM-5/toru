@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/DanSM-5/toru/pkg/nyaa"
 	"github.com/dustin/go-humanize"
-	"github.com/sweetbbak/toru/pkg/nyaa"
 )
 
 // map user input into categories for interfacing with the CLI

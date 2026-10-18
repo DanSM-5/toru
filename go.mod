@@ -1,4 +1,4 @@
-module github.com/sweetbbak/toru
+module github.com/DanSM-5/toru
 
 go 1.24
 
@@ -119,5 +119,5 @@ require (
 	zombiezen.com/go/sqlite v1.1.2 // indirect
 )
 
-// replace github.com/sweetbbak/toru/pkg/libtorrent => ./pkg/libtorrent
-// replace github.com/sweetbbak/toru => ./toru
+// replace github.com/DanSM-5/toru/pkg/libtorrent => ./pkg/libtorrent
+// replace github.com/DanSM-5/toru => ./toru

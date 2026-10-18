@@ -53,12 +53,19 @@ nix profile install github:sweetbbak/toru
 <details closed>
   <summary>Install Go</summary>
   <a href="https://go.dev/doc/install">Install go</a>
-  This project requires go 1.21.7 or higher.
+  This project requires go 1.24 or higher.
 </details>
 
 ```sh
-go install github.com/sweetbbak/toru/cmd/toru@latest
+CGO_ENABLED=0 go install github.com/DanSM-5/toru/cmd/toru@latest
 ```
+
+> [!NOTE]
+> Build with `CGO_ENABLED=0`, as the release binaries are. With cgo enabled,
+> the torrent library uses `go-libutp`, a C++ library that fails to compile
+> with GCC 15 or newer. Without cgo it uses a pure Go implementation instead.
+> Set it for every build method below too, e.g. `export CGO_ENABLED=0` before
+> running `go build`, `just` or `make`.
 
 <details closed>
   <summary>Build from source</summary>
@@ -67,7 +74,7 @@ using Go is recommended alongside `gup` so that it can be easily updated
 
 ```sh
 git clone https://github.com/sweetbbak/toru.git && cd toru
-go build -o toru ./cmd/toru
+CGO_ENABLED=0 go build -o toru ./cmd/toru
 ```
 
 you can also use the justfile
@@ -112,7 +119,7 @@ the build command.
 Example:
 
 ```sh
-GOOS=linux GOARCH=arm64 go build -o toru ./cmd/toru
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o toru ./cmd/toru
 ```
 
 _If you do this_ feel free to create an issue for a platform reporting how it went
