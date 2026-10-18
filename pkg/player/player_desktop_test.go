@@ -4,6 +4,7 @@ package player
 
 import (
 	"log"
+	"strings"
 	"testing"
 )
 
@@ -31,5 +32,24 @@ func TestNewPlayer(t *testing.T) {
 		} else {
 			t.Errorf("NewPlayer(%v) = %v, want %v", test.Player, p.Name, p.Args)
 		}
+	}
+}
+
+func TestExpandArgsPlaylist(t *testing.T) {
+	urls := []string{"http://localhost/1", "http://localhost/2"}
+
+	p := GenericPlayer{Name: "mpv", Args: []string{"--vo=kitty", "{{.URL}}"}}
+	got := p.expandArgs(NewPlaylist(urls))
+	want := []string{"--vo=kitty", "http://localhost/1", "http://localhost/2"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("expandArgs() = %v, want %v", got, want)
+	}
+
+	// placeholders embedded in a larger argument only receive the first entry
+	p = GenericPlayer{Name: "kitty", Args: []string{"-e", "mpv {{.URL}}"}}
+	got = p.expandArgs(NewPlaylist(urls))
+	want = []string{"-e", "mpv http://localhost/1"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("expandArgs() = %v, want %v", got, want)
 	}
 }

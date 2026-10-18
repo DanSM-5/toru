@@ -6,10 +6,13 @@ import (
 	"log"
 	"os"
 	"path"
+	"sort"
 
 	"github.com/anacrolix/torrent"
 	"github.com/charmbracelet/lipgloss"
 	fzf "github.com/ktr0731/go-fuzzyfinder"
+	"github.com/muesli/reflow/wordwrap"
+	"github.com/muesli/reflow/wrap"
 	"github.com/sweetbbak/toru/pkg/libtorrent"
 	"github.com/sweetbbak/toru/pkg/nyaa"
 	"github.com/sweetbbak/toru/pkg/search"
@@ -118,34 +121,7 @@ func InteractiveSearch(cl *libtorrent.Client, query string) error {
 		log.Println(err)
 	}
 
-LOOP:
-	choice, err := fzfMenu(m.Media)
-	if err != nil {
-		return err
-	}
-
-	err = PlayTorrent(cl, choice.Magnet)
-	if err != nil {
-		return err
-	}
-
-	action, err := fzfMain()
-	if err != nil {
-		return err
-	}
-
-	switch action {
-	case "select":
-		goto LOOP
-	case "search":
-		if err := InteractiveSearch(cl, ""); err != nil {
-			log.Fatal(err)
-		}
-	case "exit":
-		os.Exit(0)
-	}
-
-	return nil
+	return SelectAndPlay(cl, m)
 }
 
 func SelectAndPlay(cl *libtorrent.Client, res *search.Results) error {
@@ -157,34 +133,40 @@ LOOP:
 	}
 
 	// play that result
-	err = PlayTorrent(cl, choice.Magnet)
+	media, t, err := PlayTorrent(cl, choice.Magnet)
 	if err != nil {
 		return err
 	}
 
-	// select, search or exit
-	action, err := fzfMain()
-	if err != nil {
-		return err
-	}
-
-	switch action {
-	case "select":
-		goto LOOP
-	case "search":
-		if err := InteractiveSearch(cl, ""); err != nil {
-			log.Fatal(err)
+	for {
+		// replay, select, search or exit
+		action, err := fzfMain()
+		if err != nil {
+			return err
 		}
-	case "exit":
-		os.Exit(0)
+
+		switch action {
+		case "replay":
+			if err := PlayMedia(media, t); err != nil {
+				return err
+			}
+			continue
+		case "select":
+			goto LOOP
+		case "search":
+			if err := InteractiveSearch(cl, ""); err != nil {
+				log.Fatal(err)
+			}
+		case "exit":
+			os.Exit(0)
+		}
+
+		return nil
 	}
-
-	return nil
-
 }
 
 func fzfMain() (string, error) {
-	m := []string{"select", "search", "exit"}
+	m := []string{"replay", "select", "search", "exit"}
 	idx, err := fzf.Find(
 		m,
 		func(i int) string {
@@ -204,15 +186,17 @@ func fzfMain() (string, error) {
 	return m[idx], nil
 }
 
-func fzfEpisodes(m []*torrent.File) (string, error) {
+// select one or more episodes (Tab to mark multiple), returned in playlist order
+func fzfEpisodes(m []*torrent.File) ([]string, error) {
 	l := len(m) - 1
-	idx, err := fzf.Find(
+	idxs, err := fzf.FindMulti(
 		m,
 		func(i int) string {
 			// fpath := m[i].DisplayPath()
 			fpath := m[l-i].DisplayPath()
 			return fpath
 		},
+		fzf.WithHeader("Tab to select multiple episodes"),
 	)
 
 	// User has selected nothing
@@ -220,11 +204,17 @@ func fzfEpisodes(m []*torrent.File) (string, error) {
 		if errors.Is(err, fzf.ErrAbort) {
 			os.Exit(0)
 		} else {
-			return "", err
+			return nil, err
 		}
 	}
 
-	return m[l-idx].DisplayPath(), nil
+	var fpaths []string
+	for _, idx := range idxs {
+		fpaths = append(fpaths, m[l-idx].DisplayPath())
+	}
+	sort.Strings(fpaths)
+
+	return fpaths, nil
 }
 
 func fzfMenu(m []nyaa.Media) (nyaa.Media, error) {
@@ -235,10 +225,10 @@ func fzfMenu(m []nyaa.Media) (nyaa.Media, error) {
 		},
 		fzf.WithPreviewWindow(func(i, width, height int) string {
 			if i == -1 {
-				return "lol"
+				return "No matches"
 			}
 
-			return FormatMedia(m[i])
+			return wrapPreview(FormatMedia(m[i]), width)
 
 		}),
 	)
@@ -263,10 +253,10 @@ func fzfMenuMulti(m []nyaa.Media) ([]nyaa.Media, error) {
 		},
 		fzf.WithPreviewWindow(func(i, width, height int) string {
 			if i == -1 {
-				return "lol"
+				return "No matches"
 			}
 
-			return FormatMedia(m[i])
+			return wrapPreview(FormatMedia(m[i]), width)
 
 		}),
 	)
@@ -286,4 +276,15 @@ func fzfMenuMulti(m []nyaa.Media) ([]nyaa.Media, error) {
 	}
 
 	return matches, nil
+}
+
+// word wrap text to fit inside the preview window, which takes the right half of
+// the terminal minus its borders and padding. long words without spaces are hard wrapped
+func wrapPreview(s string, width int) string {
+	w := width - width/2 - 4
+	if w < 1 {
+		return s
+	}
+
+	return wrap.String(wordwrap.String(s, w), w)
 }

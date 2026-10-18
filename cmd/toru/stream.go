@@ -79,34 +79,39 @@ func StreamTorrent(torfile string, cl *libtorrent.Client) (player.MediaEntry, *t
 	files := t.Files()
 	filesCount := len(files)
 
-	var link string
-
 	if filesCount != 1 {
-		fpath, err := fzfEpisodes(files)
+		fpaths, err := fzfEpisodes(files)
 		if err != nil {
 			return player.MediaEntry{}, nil, err
 		}
 
-		link = cl.ServeTorrentEpisode(t, fpath)
-	} else {
-		if len(files) < 1 {
-			return player.MediaEntry{}, nil, fmt.Errorf("oops something went wrong :P - no detected files in torrent in func stream torrent")
+		var links []string
+		for _, fpath := range fpaths {
+			links = append(links, cl.ServeTorrentEpisode(t, fpath))
 		}
 
-		file := files[0].DisplayPath()
-		link = cl.ServeTorrentEpisode(t, file)
+		return player.NewPlaylist(links), t, nil
 	}
+
+	file := files[0].DisplayPath()
+	link := cl.ServeTorrentEpisode(t, file)
 
 	return player.MediaEntry{URL: link}, t, nil
 }
 
 // play a single torrent from a provided magnet, torrent or torrent URL
-func PlayTorrent(cl *libtorrent.Client, magnet string) error {
+// returns the played media so it can be replayed later
+func PlayTorrent(cl *libtorrent.Client, magnet string) (player.MediaEntry, *torrent.Torrent, error) {
 	link, t, err := StreamTorrent(magnet, cl)
 	if err != nil {
-		return err
+		return player.MediaEntry{}, nil, err
 	}
 
+	return link, t, PlayMedia(link, t)
+}
+
+// open the media in the player and wait until the player exits
+func PlayMedia(link player.MediaEntry, t *torrent.Torrent) error {
 	p, err := player.NewPlayer(options.Player)
 	if err != nil {
 		return err
@@ -139,21 +144,21 @@ func PlayTorrent(cl *libtorrent.Client, magnet string) error {
 // stream subcommand entry point
 func runStream(cl *libtorrent.Client) error {
 	if streaming.Magnet != "" {
-		err := PlayTorrent(cl, streaming.Magnet)
+		_, _, err := PlayTorrent(cl, streaming.Magnet)
 		if err != nil {
 			return err
 		}
 	}
 
 	if streaming.TorrentFile != "" {
-		err := PlayTorrent(cl, streaming.TorrentFile)
+		_, _, err := PlayTorrent(cl, streaming.TorrentFile)
 		if err != nil {
 			return err
 		}
 	}
 
 	if streaming.Args.Query != "" {
-		err := PlayTorrent(cl, streaming.Args.Query)
+		_, _, err := PlayTorrent(cl, streaming.Args.Query)
 		if err != nil {
 			return err
 		}

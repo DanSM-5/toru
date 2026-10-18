@@ -17,6 +17,8 @@ var androidPlayers = []GenericPlayer{
 
 // Open the given stream in a GenericPlayer.
 func (p GenericPlayer) Open(media MediaEntry) (*os.Process, error) {
+	// android intents only take a single url, so playlists start at their first entry
+	media.URLs = nil
 	cmd := exec.Command(p.Args[0], p.expandArgs(media)[1:]...)
 	err := cmd.Start()
 	if err != nil {

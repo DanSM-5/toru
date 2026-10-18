@@ -2,6 +2,7 @@ package player
 
 import (
 	"bytes"
+	"strings"
 	"text/template"
 )
 
@@ -19,7 +20,18 @@ type Player interface {
 }
 
 type MediaEntry struct {
-	URL   string
+	URL string
+	// URLs holds every entry of a playlist, URL is always its first item
+	URLs []string
+}
+
+// NewPlaylist creates a MediaEntry that plays the given urls in order
+func NewPlaylist(urls []string) MediaEntry {
+	if len(urls) == 0 {
+		return MediaEntry{}
+	}
+
+	return MediaEntry{URL: urls[0], URLs: urls}
 }
 
 func (p *GenericPlayer) expandArgs(data MediaEntry) ([]string) {
@@ -27,6 +39,12 @@ func (p *GenericPlayer) expandArgs(data MediaEntry) ([]string) {
 	var buffer bytes.Buffer
 
 	for _, u := range p.Args {
+		// a bare url placeholder expands to every playlist entry so players like mpv queue them
+		if strings.TrimSpace(u) == "{{.URL}}" && len(data.URLs) > 1 {
+			res = append(res, data.URLs...)
+			continue
+		}
+
 		temp := template.New("")
 		temp.Funcs(template.FuncMap{"GetHelperScriptPath": p.GetHelperScriptPath})
 		temp, _ = temp.Parse(u)
